@@ -1,1 +1,1 @@
-uwsgi --ini uwsgi_volume.ini
+uwsgi --ini uwsgi_master.ini
