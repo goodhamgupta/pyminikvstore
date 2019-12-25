@@ -34,3 +34,11 @@ Implementation of a robust and production-level KV store. This is a direct copy 
 ## Notes
 
 - `reload-mercy` and `worker-reload-mercy` help kill the uwsgi workers faster. Refer the github thread present [here](https://github.com/unbit/uwsgi/issues/844#issuecomment-455756013)
+
+## Usage
+
+```
+curl -X PUT -d ever http://localhost:3000/greatest
+curl -X GET http://localhost:3000/greatest
+curl -X DELETE http://localhost:3000/greatest
+```
