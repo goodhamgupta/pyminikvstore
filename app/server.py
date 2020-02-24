@@ -3,6 +3,7 @@ import os
 import socket
 import sys
 import time
+import logging
 
 
 if os.environ["TYPE"] == "master":
@@ -35,14 +36,16 @@ def master(env, start_response):
 class FileCache(object):
     def __init__(self, basedir):
         self.basedir = os.path.realpath(basedir)
-        os.makedirs(basedir)
+        os.makedirs(basedir, exist_ok=True)
 
     def keytopath(self, key):
         # multilayer nginx
-        assert len(key) == 16
-        path = basedir + "/" + key[0:1] + "/" + key[1:2]
+        assert len(key) == 32
+        import pdb
+        pdb.set_trace()
+        path = self.basedir + "/" + key[0:1] + "/" + key[1:2]
         if not os.path.isdir(path):
-            os.makedirs(path)
+            os.makedirs(path, exist_ok=True)
         return os.path.join(path, key[2:])
 
     def exists(self, key):
@@ -67,7 +70,7 @@ if os.environ["TYPE"] == "volume":
     master = os.environ["MASTER"]
 
     # create the filecache
-    FileCache(os.environ["VOLUME"])
+    fc = FileCache(os.environ["VOLUME"])
 
 
 def volume(env, start_response):
@@ -80,9 +83,9 @@ def volume(env, start_response):
             # key not found in filecache
             start_response("404 Not Found", [("Content-Type", "application/json")])
             return ["Value not found for key: {}".format(key).encode()]
-    return FileCache.get(hkey)
+        return FileCache.get(hkey)
 
     if request_type == "PUT":
-        fc.put(hashed_key, env["wsgi.input"].read(env["CONTENT_LENGTH"]))
+        fc.put(hashed_key, env["wsgi.input"].read())
     if request_type == "DELETE":
         fc.delete(hashed_key)
