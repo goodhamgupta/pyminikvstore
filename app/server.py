@@ -80,3 +80,6 @@ def volume(env, start_response):
             start_response("404 Not Found", [("Content-Type", "application/json")])
             return ["Value not found for key: {}".format(key).encode()]
     return FileCache.get(key)
+
+    if request_type == "PUT":
+        fc.put(key, env['wsgi.input'].read(env['CONTENT_LENGTH']))
