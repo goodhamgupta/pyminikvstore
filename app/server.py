@@ -34,11 +34,12 @@ def master(env, start_response):
 
 class FileCache(object):
     def __init__(self, basedir):
+        self.basedir = os.path.realpath(basedir)
         os.makedirs(basedir)
-        self.basedir = basedir
 
     def keytopath(self, key):
         # multilayer nginx
+        assert len(key) == 16
         path = basedir + "/" + key[0:1] + "/" + key[1:2]
         if not os.path.isdir(path):
             os.makedirs(path)
@@ -51,10 +52,10 @@ class FileCache(object):
         os.path.unlink(self.keytopath(key))
 
     def get(self, key):
-        return open(self.keytopath(key), 'rb').read()
+        return open(self.keytopath(key), "rb").read()
 
     def put(self, key, value):
-        with open(self.keytopath(key), 'wb') as file:
+        with open(self.keytopath(key), "wb") as file:
             file.write(value)
         pass
 
@@ -79,7 +80,9 @@ def volume(env, start_response):
             # key not found in filecache
             start_response("404 Not Found", [("Content-Type", "application/json")])
             return ["Value not found for key: {}".format(key).encode()]
-    return FileCache.get(key)
+    return FileCache.get(hkey)
 
     if request_type == "PUT":
-        fc.put(key, env['wsgi.input'].read(env['CONTENT_LENGTH']))
+        fc.put(hashed_key, env["wsgi.input"].read(env["CONTENT_LENGTH"]))
+    if request_type == "DELETE":
+        fc.delete(hashed_key)
