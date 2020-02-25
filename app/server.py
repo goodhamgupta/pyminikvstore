@@ -1,9 +1,12 @@
 import hashlib
+import json
+import logging
 import os
 import socket
 import sys
 import time
-import logging
+
+from typing import Any, Dict
 
 
 if os.environ["TYPE"] == "master":
@@ -12,8 +15,8 @@ if os.environ["TYPE"] == "master":
     db = plyvel.DB("/tmp/cachedb", create_if_missing=True)
 
 
-def master(env, start_response):
-    key = env.get("REQUEST_URI")[1:]
+def master(env: Dict[str, str], start_response):
+    key = env.get("REQUEST_URI")[1:] # type: ignore
     request_type = env.get("REQUEST_METHOD")
     metakey = db.get(key.encode("utf-8"))
 
@@ -34,11 +37,11 @@ def master(env, start_response):
 
 
 class FileCache(object):
-    def __init__(self, basedir):
+    def __init__(self, basedir: str) -> None:
         self.basedir = os.path.realpath(basedir)
         os.makedirs(basedir, exist_ok=True)
 
-    def keytopath(self, key):
+    def keytopath(self, key: str) -> str:
         # multilayer nginx
         assert len(key) == 32
         path = self.basedir + "/" + key[0:1] + "/" + key[1:2]
@@ -46,32 +49,31 @@ class FileCache(object):
             os.makedirs(path, exist_ok=True)
         return os.path.join(path, key[2:])
 
-    def exists(self, key):
+    def exists(self, key: str) -> bool:
         return os.path.isfile(self.keytopath(key))
 
-    def delete(self, key):
+    def delete(self, key: str) -> None:
         os.unlink(self.keytopath(key))
 
-    def get(self, key):
+    def get(self, key: str) -> bytes:
         return open(self.keytopath(key), "rb").read()
 
-    def put(self, key, value):
+    def put(self, key: str, value: bytes) -> None:
         with open(self.keytopath(key), "wb") as file:
             file.write(value)
-        pass
 
 
 if os.environ["TYPE"] == "volume":
     host = socket.gethostname()
 
     # register with master
-    master = os.environ["MASTER"]
+    master = os.environ["MASTER"] # type: ignore
 
     # create the filecache
     fc = FileCache(os.environ["VOLUME"])
 
 
-def volume(env, start_response):
+def volume(env: Dict[str, Any], start_response):
     key = env["REQUEST_URI"].encode("utf-8")
     hashed_key = hashlib.md5(key).hexdigest()
     request_type = env.get("REQUEST_METHOD")
@@ -81,7 +83,7 @@ def volume(env, start_response):
             # key not found in filecache
             start_response("404 Not Found", [("Content-Type", "application/json")])
             return ["Value not found for key: {}".format(key).encode()]
-        return FileCache.get(hkey)
+        return fc.get(hashed_key)
 
     if request_type == "PUT":
         fc.put(hashed_key, env["wsgi.input"].read())
