@@ -50,7 +50,7 @@ class FileCache(object):
         return os.path.isfile(self.keytopath(key))
 
     def delete(self, key):
-        os.path.unlink(self.keytopath(key))
+        os.unlink(self.keytopath(key))
 
     def get(self, key):
         return open(self.keytopath(key), "rb").read()
