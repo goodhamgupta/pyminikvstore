@@ -41,8 +41,6 @@ class FileCache(object):
     def keytopath(self, key):
         # multilayer nginx
         assert len(key) == 32
-        import pdb
-        pdb.set_trace()
         path = self.basedir + "/" + key[0:1] + "/" + key[1:2]
         if not os.path.isdir(path):
             os.makedirs(path, exist_ok=True)
@@ -87,5 +85,9 @@ def volume(env, start_response):
 
     if request_type == "PUT":
         fc.put(hashed_key, env["wsgi.input"].read())
+        start_response("201 Created", [("Content-Type", "application/json")])
+        return [f"Key {key} has been stored"]
     if request_type == "DELETE":
         fc.delete(hashed_key)
+        start_response("202 Accepted", [("Content-Type", "application/json")])
+        return [f"Key {key} has been deleted"]
