@@ -10,6 +10,10 @@ import time
 from typing import Any, Dict
 
 
+def err(start_response, resp):
+    start_response(resp, [('Content-type', 'text/plain')]
+    return [b'']
+
 if os.environ["TYPE"] == "master":
     # register volume servers
     volumes = os.environ["VOLUMES"].split(",")
@@ -33,14 +37,12 @@ def master(env: Dict[str, str], start_response):
             db.put(key.encode(), metakey.encode())
         else:
             # this key doesn't exist and we aren't trying to create it
-            start_response("404 Not Found", [("Content-Type", "application/json")])
-            return ["Value not found for key: {}".format(key).encode()]
+            return err(start_response, "404 Not Found")
     else:
         # key found
         """
         if request_type == "PUT":
-            start_response("409 Conflict", [("Content-Type", "application/json")])
-            return ["Key already exists!"]
+            return err(start_response, "409 Conflict")
         """
         meta = json.loads(metakey)
     # send the redirect
@@ -93,17 +95,17 @@ def volume(env: Dict[str, Any], start_response):
     if request_type == "GET":
         if not fc.exists(hashed_key):
             # key not found in filecache
-            start_response("404 Not Found", [("Content-Type", "application/json")])
+            start_response("404 Not Found", [("Content-Type", "text/plain")])
             return ["Value not found for key: {}".format(key).encode()]
         value = fc.get(hashed_key)
-        start_response("200 OK", [("Content-Type", "application/json")])
+        start_response("200 OK", [("Content-Type", "text/plain")])
         return ["Value: {}".format(value).encode()]
 
     if request_type == "PUT":
         fc.put(hashed_key, env["wsgi.input"].read())
-        start_response("201 Created", [("Content-Type", "application/json")])
+        start_response("201 Created", [("Content-Type", "text/plain")])
         return [f"Key {key} has been stored"]
     if request_type == "DELETE":
         fc.delete(hashed_key)
-        start_response("202 Accepted", [("Content-Type", "application/json")])
+        start_response("202 Accepted", [("Content-Type", "text/plain")])
         return [f"Key {key} has been deleted"]
