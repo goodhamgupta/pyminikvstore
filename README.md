@@ -38,7 +38,7 @@ Implementation of a robust and production-level KV store. This is a direct copy 
 ## Usage
 
 ```
-curl -X PUT -d ever http://localhost:3000/greatest
-curl -X GET http://localhost:3000/greatest
-curl -X DELETE http://localhost:3000/greatest
+curl -L -X PUT -d ever http://localhost:3000/greatest
+curl -L -X GET http://localhost:3000/greatest
+curl -L -X DELETE http://localhost:3000/greatest
 ```

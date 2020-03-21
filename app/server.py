@@ -10,8 +10,8 @@ import time
 from typing import Any, Dict
 
 
-def resp(start_response, resp_msg, headers=[("Content-type", "text/plain")], body=b""):
-    start_response(resp_msg, headers)
+def resp(start_response, code, headers=[("Content-type", "text/plain")], body=b""):
+    start_response(code, headers)
     return [body]
 
 
@@ -23,7 +23,7 @@ if os.environ["TYPE"] == "master":
     db = plyvel.DB("/tmp/cachedb", create_if_missing=True)
 
 
-def master(env: Dict[str, str], start_response):
+def master(env: Dict[str, str], sr):
     key = env.get("REQUEST_URI")[1:]  # type: ignore
     request_type = env.get("REQUEST_METHOD")
     metakey = db.get(key.encode("utf-8"))
@@ -34,16 +34,16 @@ def master(env: Dict[str, str], start_response):
             volume = random.choice(volumes)
 
             # save volume to database
-            metakey = json.dumps({"volume": volume})
-            db.put(key.encode(), metakey.encode())
+            meta = json.dumps({"volume": volume})
+            db.put(key.encode(), meta.encode())
         else:
             # this key doesn't exist and we aren't trying to create it
-            return resp(start_response, code="404 Not Found", headers=headers)
+            return resp(sr, code="404 Not Found")
     else:
         # key found
         """
         if request_type == "PUT":
-            return resp(start_response, "409 Conflict")
+            return resp(sr, "409 Conflict")
         """
         meta = json.loads(metakey)
     # send the redirect
@@ -51,7 +51,7 @@ def master(env: Dict[str, str], start_response):
     # send the redirect
     headers = [("location", f"http://{volume}/{key}")]
     return resp(
-        start_response, code="307 Temporary Redirect", headers=headers, body=meta
+        sr, code="307 Temporary Redirect", headers=headers, body=meta
     )
 
 
@@ -89,7 +89,7 @@ if os.environ["TYPE"] == "volume":
     fc = FileCache(os.environ["VOLUME"])
 
 
-def volume(env: Dict[str, Any], start_response):
+def volume(env: Dict[str, Any], sr):
     key = env["REQUEST_URI"].encode("utf-8")[1:]
     hashed_key = hashlib.md5(key).hexdigest()
     request_type = env.get("REQUEST_METHOD")
@@ -98,14 +98,14 @@ def volume(env: Dict[str, Any], start_response):
         if not fc.exists(hashed_key):
             # key not found in filecache
             return resp(
-                start_response,
+                sr,
                 code="404 Not Found",
                 headers=[("Content-Type", "text/plain")],
                 body="Value not found for key: {}".format(key).encode(),
             )
         value = fc.get(hashed_key)
         return resp(
-            start_response,
+            sr,
             code="200 OK",
             headers=[("Content-Type", "text/plain")],
             body="Value: {}".format(value).encode(),
@@ -114,7 +114,7 @@ def volume(env: Dict[str, Any], start_response):
     if request_type == "PUT":
         fc.put(hashed_key, env["wsgi.input"].read())
         return resp(
-            start_response,
+            sr,
             code="201 Created",
             headers=[("Content-Type", "text/plain")],
             body=f"Key {key} has been stored",
@@ -122,7 +122,7 @@ def volume(env: Dict[str, Any], start_response):
     if request_type == "DELETE":
         fc.delete(hashed_key)
         return resp(
-            start_response,
+            sr,
             code="202 Accepted",
             headers=[("Content-Type", "text/plain")],
             body=f"Key {key} has been deleted",
