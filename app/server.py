@@ -10,9 +10,10 @@ import time
 from typing import Any, Dict
 
 
-def err(start_response, resp):
-    start_response(resp, [('Content-type', 'text/plain')]
-    return [b'']
+def resp(start_response, resp_msg, headers=[("Content-type", "text/plain")], body=b""):
+    start_response(resp_msg, headers)
+    return [body]
+
 
 if os.environ["TYPE"] == "master":
     # register volume servers
@@ -37,20 +38,21 @@ def master(env: Dict[str, str], start_response):
             db.put(key.encode(), metakey.encode())
         else:
             # this key doesn't exist and we aren't trying to create it
-            return err(start_response, "404 Not Found")
+            return resp(start_response, code="404 Not Found", headers=headers)
     else:
         # key found
         """
         if request_type == "PUT":
-            return err(start_response, "409 Conflict")
+            return resp(start_response, "409 Conflict")
         """
         meta = json.loads(metakey)
     # send the redirect
     volume = meta["volume"]
     # send the redirect
     headers = [("location", f"http://{volume}/{key}")]
-    start_response("307 Temporary Redirect", headers)
-    return [meta]
+    return resp(
+        start_response, code="307 Temporary Redirect", headers=headers, body=meta
+    )
 
 
 class FileCache(object):
@@ -95,17 +97,33 @@ def volume(env: Dict[str, Any], start_response):
     if request_type == "GET":
         if not fc.exists(hashed_key):
             # key not found in filecache
-            start_response("404 Not Found", [("Content-Type", "text/plain")])
-            return ["Value not found for key: {}".format(key).encode()]
+            return resp(
+                start_response,
+                code="404 Not Found",
+                headers=[("Content-Type", "text/plain")],
+                body="Value not found for key: {}".format(key).encode(),
+            )
         value = fc.get(hashed_key)
-        start_response("200 OK", [("Content-Type", "text/plain")])
-        return ["Value: {}".format(value).encode()]
+        return resp(
+            start_response,
+            code="200 OK",
+            headers=[("Content-Type", "text/plain")],
+            body="Value: {}".format(value).encode(),
+        )
 
     if request_type == "PUT":
         fc.put(hashed_key, env["wsgi.input"].read())
-        start_response("201 Created", [("Content-Type", "text/plain")])
-        return [f"Key {key} has been stored"]
+        return resp(
+            start_response,
+            code="201 Created",
+            headers=[("Content-Type", "text/plain")],
+            body=f"Key {key} has been stored",
+        )
     if request_type == "DELETE":
         fc.delete(hashed_key)
-        start_response("202 Accepted", [("Content-Type", "text/plain")])
-        return [f"Key {key} has been deleted"]
+        return resp(
+            start_response,
+            code="202 Accepted",
+            headers=[("Content-Type", "text/plain")],
+            body=f"Key {key} has been deleted",
+        )
