@@ -41,18 +41,11 @@ def master(env: Dict[str, str], sr):
             return resp(sr, code="404 Not Found")
     else:
         # key found
-        """
         if request_type == "PUT":
-            return resp(sr, "409 Conflict")
-        """
-        meta = json.loads(metakey)
-    # send the redirect
-    volume = meta["volume"]
+            return resp(sr, code="409 Conflict")
     # send the redirect
     headers = [("location", f"http://{volume}/{key}")]
-    return resp(
-        sr, code="307 Temporary Redirect", headers=headers, body=meta
-    )
+    return resp(sr, code="307 Temporary Redirect", headers=headers, body=meta)
 
 
 class FileCache(object):
@@ -112,13 +105,20 @@ def volume(env: Dict[str, Any], sr):
         )
 
     if request_type == "PUT":
-        fc.put(hashed_key, env["wsgi.input"].read())
-        return resp(
-            sr,
-            code="201 Created",
-            headers=[("Content-Type", "text/plain")],
-            body=f"Key {key} has been stored",
-        )
+        con_len = int(env.get("CONTENT_LENGTH", "0"))
+        if con_len > 0:
+            fc.put(hashed_key, env["wsgi.input"].read())
+            return resp(
+                sr,
+                code="201 Created",
+                headers=[("Content-Type", "text/plain")],
+                body=f"Key {key} has been stored",
+            )
+        else:
+            return resp(
+                sr, code="411 Length Required", headers=[("Content-Type", "text/plain")]
+            )
+
     if request_type == "DELETE":
         fc.delete(hashed_key)
         return resp(
