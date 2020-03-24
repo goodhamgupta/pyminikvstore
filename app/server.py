@@ -6,6 +6,7 @@ import random
 import socket
 import sys
 import time
+import xattr
 from tempfile import NamedTemporaryFile
 
 from typing import Any, Dict
@@ -52,6 +53,9 @@ def master(env: Dict[str, str], sr):
 
 
 class FileCache(object):
+    """
+    This is a single server key value store
+    """
     def __init__(self, basedir: str) -> None:
         self.basedir = os.path.realpath(basedir)
         self.tempdir = os.path.join(self.basedir, "tmp")
@@ -59,6 +63,7 @@ class FileCache(object):
 
     def keytopath(self, key: str) -> str:
         # multilayer nginx
+        hashed_key = hashlib.md5(key).hexdigest()
         assert len(key) == 32
         path = self.tempdir + "/" + key[0:1] + "/" + key[1:2]
         if not os.path.isdir(path):
@@ -74,9 +79,12 @@ class FileCache(object):
     def get(self, key: str) -> bytes:
         return open(self.keytopath(key), "rb").read()
 
-    def put(self, key: str, value: bytes) -> None:
+    def put(self, key: str, stream) -> None:
         f = NamedTemporaryFile(dir=self.tempdir, delete=False)
-        f.write(value)
+        # TODO: read in chunks to save ram
+        xattr.set(f.name, 'user.key', key)
+        f.write(stream.read())
+        # TODO: check hash
         os.rename(f.name, self.keytopath(key))
 
 
@@ -89,11 +97,10 @@ if os.environ["TYPE"] == "volume":
 
 def volume(env: Dict[str, Any], sr):
     key = env["REQUEST_URI"].encode("utf-8")[1:]
-    hashed_key = hashlib.md5(key).hexdigest()
     request_type = env.get("REQUEST_METHOD")
 
     if request_type == "GET":
-        if not fc.exists(hashed_key):
+        if not fc.exists(key):
             # key not found in filecache
             return resp(
                 sr,
@@ -101,7 +108,7 @@ def volume(env: Dict[str, Any], sr):
                 headers=[("Content-Type", "text/plain")],
                 body="Value not found for key: {}".format(key).encode(),
             )
-        value = fc.get(hashed_key)
+        value = fc.get(key)
         return resp(
             sr,
             code="200 OK",
@@ -112,7 +119,7 @@ def volume(env: Dict[str, Any], sr):
     if request_type == "PUT":
         con_len = int(env.get("CONTENT_LENGTH", "0"))
         if con_len > 0:
-            fc.put(hashed_key, env["wsgi.input"].read())
+            fc.put(key, env["wsgi.input"])
             return resp(
                 sr,
                 code="201 Created",
@@ -125,7 +132,7 @@ def volume(env: Dict[str, Any], sr):
             )
 
     if request_type == "DELETE":
-        fc.delete(hashed_key)
+        fc.delete(key)
         return resp(
             sr,
             code="202 Accepted",
