@@ -6,6 +6,7 @@ import random
 import socket
 import sys
 import time
+from tempfile import NamedTemporaryFile
 
 from typing import Any, Dict
 
@@ -34,8 +35,8 @@ def master(env: Dict[str, str], sr):
             volume = random.choice(volumes)
 
             # save volume to database
-            meta = json.dumps({"volume": volume})
-            db.put(key.encode(), meta.encode())
+            metakey = json.dumps({"volume": volume})
+            db.put(key.encode(), metakey.encode())
         else:
             # this key doesn't exist and we aren't trying to create it
             return resp(sr, code="404 Not Found")
@@ -43,20 +44,23 @@ def master(env: Dict[str, str], sr):
         # key found
         if request_type == "PUT":
             return resp(sr, code="409 Conflict")
+        metakey = metakey.decode()
+    volume = json.loads(metakey)["volume"]
     # send the redirect
     headers = [("location", f"http://{volume}/{key}")]
-    return resp(sr, code="307 Temporary Redirect", headers=headers, body=meta)
+    return resp(sr, code="307 Temporary Redirect", headers=headers, body=metakey)
 
 
 class FileCache(object):
     def __init__(self, basedir: str) -> None:
         self.basedir = os.path.realpath(basedir)
-        os.makedirs(basedir, exist_ok=True)
+        self.tempdir = os.path.join(self.basedir, "tmp")
+        os.makedirs(self.tempdir, exist_ok=True)
 
     def keytopath(self, key: str) -> str:
         # multilayer nginx
         assert len(key) == 32
-        path = self.basedir + "/" + key[0:1] + "/" + key[1:2]
+        path = self.tempdir + "/" + key[0:1] + "/" + key[1:2]
         if not os.path.isdir(path):
             os.makedirs(path, exist_ok=True)
         return os.path.join(path, key[2:])
@@ -71,8 +75,9 @@ class FileCache(object):
         return open(self.keytopath(key), "rb").read()
 
     def put(self, key: str, value: bytes) -> None:
-        with open(self.keytopath(key), "wb") as file:
-            file.write(value)
+        f = NamedTemporaryFile(dir=self.tempdir, delete=False)
+        f.write(value)
+        os.rename(f.name, self.keytopath(key))
 
 
 if os.environ["TYPE"] == "volume":
