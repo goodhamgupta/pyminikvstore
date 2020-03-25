@@ -64,11 +64,11 @@ class FileCache(object):
     def keytopath(self, key: str) -> str:
         # multilayer nginx
         hashed_key = hashlib.md5(key).hexdigest()
-        assert len(key) == 32
-        path = self.tempdir + "/" + key[0:1] + "/" + key[1:2]
+        assert len(hashed_key) == 32
+        path = self.tempdir + "/" + hashed_key[0:1] + "/" + hashed_key[1:2]
         if not os.path.isdir(path):
             os.makedirs(path, exist_ok=True)
-        return os.path.join(path, key[2:])
+        return os.path.join(path, hashed_key[2:])
 
     def exists(self, key: str) -> bool:
         return os.path.isfile(self.keytopath(key))
