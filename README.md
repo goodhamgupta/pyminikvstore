@@ -2,6 +2,8 @@
 
 Implementation of a robust and production-level KV store. This is a direct copy of the screencast by George Hotz which can be found [here](https://www.youtube.com/watch?v=cAFjZ1gXBxc).
 
+This implementation will store KV pairs. It is like nginx has but with filenames as MD5 hash and the real key present in the xattr of the file.
+
 ## Implementation
 
 - It will ahve two endpoints:

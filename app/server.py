@@ -7,6 +7,7 @@ import socket
 import sys
 import time
 import xattr
+import requests
 from tempfile import NamedTemporaryFile
 
 from typing import Any, Dict
@@ -26,7 +27,7 @@ if os.environ["TYPE"] == "master":
 
 
 def master(env: Dict[str, str], sr):
-    key = env.get("REQUEST_URI")[1:]  # type: ignore
+    key = env.get("PATH_INFO")[1:]  # type: ignore
     request_type = env.get("REQUEST_METHOD")
     metakey = db.get(key.encode("utf-8"))
 
@@ -84,7 +85,12 @@ class FileCache(object):
         return os.path.isfile(self.keytopath(key))
 
     def delete(self, key: str) -> None:
-        os.unlink(self.keytopath(key))
+        try:
+            os.unlink(self.keytopath(key))
+            return True
+        except FileNotFoundError:
+            pass
+        return False
 
     def get(self, key: str) -> bytes:
         return open(self.keytopath(key), "rb").read()
@@ -100,35 +106,40 @@ class FileCache(object):
 
 
 if os.environ["TYPE"] == "volume":
-    host = socket.gethostname()
 
     # create the filecache
     fc = FileCache(os.environ["VOLUME"])
 
 
 def volume(env: Dict[str, Any], sr):
-    key = env["REQUEST_URI"].encode("utf-8")[1:]
+    host = f"env['SERVER_NAME']:env['SERVER_PORT']"
+    key = env["PATH_INFO"].encode("utf-8")[1:]
     request_type = env.get("REQUEST_METHOD")
 
     if request_type == "PUT":
         if fc.exists(key):
             # can't write, already exists
-            return resp(sr, code='409 Conflict')
+            return resp(sr, code="409 Conflict")
         con_len = int(env.get("CONTENT_LENGTH", "0"))
         if con_len > 0:
             # notify database
-            fc.put(key, env["wsgi.input"])
-            return resp(
-                sr,
-                code="201 Created",
-                headers=[("Content-Type", "text/plain")],
-                body=f"Key {key} has been stored",
-            )
+            response = requests.post(f"http://localhost:3000/{key.decode()}", json={"volume": host})
+            if response.status_code == 200:
+                fc.put(key, env["wsgi.input"])
+                return resp(
+                    sr,
+                    code="201 Created",
+                    headers=[("Content-Type", "text/plain")],
+                    body=f"Key {key} has been stored",
+                )
+            else:
+                fc.delete(key)
+                return resp(sr, code="500 Internal Server Error",)
+
         else:
             return resp(
                 sr, code="411 Length Required", headers=[("Content-Type", "text/plain")]
             )
-
 
     if request_type == "GET":
         if not fc.exists(key):
@@ -148,10 +159,19 @@ def volume(env: Dict[str, Any], sr):
         )
 
     if request_type == "DELETE":
-        fc.delete(key)
-        return resp(
-            sr,
-            code="202 Accepted",
-            headers=[("Content-Type", "text/plain")],
-            body=f"Key {key} has been deleted",
-        )
+        import pdb
+        pdb.set_trace()
+        response = requests.post(f"http://localhost:3000/{key.decode()}")
+        if response.status_code == 200:
+            if fc.delete(key):
+                return resp(
+                    sr,
+                    code="202 Accepted",
+                    headers=[("Content-Type", "text/plain")],
+                    body=f"Key {key} has been deleted",
+                )
+            else:
+                # file wasn't on disk
+                return resp(sr, code="500 Internal Server Error")
+        else:
+            return resp(sr, code="500 Internal Server Error")
