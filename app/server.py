@@ -30,6 +30,15 @@ def master(env: Dict[str, str], sr):
     request_type = env.get("REQUEST_METHOD")
     metakey = db.get(key.encode("utf-8"))
 
+    if request_type == "POST":
+        # POST is called by the volume servers to write to the database
+        flen = int(env.get("CONTENT_LENGTH", "0"))
+        if flen > 0:
+            db.put(key.encode("utf-8"), env["wsgi.input"].read(), sync=True)
+        else:
+            db.delete(key.encode("utf-8"))
+        return resp(sr, code="200 OK")
+
     if metakey is None:
         if request_type == "PUT":
             # TODO: Make volume selection better
@@ -56,6 +65,7 @@ class FileCache(object):
     """
     This is a single server key value store
     """
+
     def __init__(self, basedir: str) -> None:
         self.basedir = os.path.realpath(basedir)
         self.tempdir = os.path.join(self.basedir, "tmp")
@@ -82,7 +92,8 @@ class FileCache(object):
     def put(self, key: str, stream) -> None:
         f = NamedTemporaryFile(dir=self.tempdir, delete=False)
         # TODO: read in chunks to save ram
-        xattr.set(f.name, 'user.key', key)
+        # Save real name in xattr which will help rebuild db.
+        xattr.set(f.name, "user.key", key)
         f.write(stream.read())
         # TODO: check hash
         os.rename(f.name, self.keytopath(key))
@@ -98,6 +109,26 @@ if os.environ["TYPE"] == "volume":
 def volume(env: Dict[str, Any], sr):
     key = env["REQUEST_URI"].encode("utf-8")[1:]
     request_type = env.get("REQUEST_METHOD")
+
+    if request_type == "PUT":
+        if fc.exists(key):
+            # can't write, already exists
+            return resp(sr, code='409 Conflict')
+        con_len = int(env.get("CONTENT_LENGTH", "0"))
+        if con_len > 0:
+            # notify database
+            fc.put(key, env["wsgi.input"])
+            return resp(
+                sr,
+                code="201 Created",
+                headers=[("Content-Type", "text/plain")],
+                body=f"Key {key} has been stored",
+            )
+        else:
+            return resp(
+                sr, code="411 Length Required", headers=[("Content-Type", "text/plain")]
+            )
+
 
     if request_type == "GET":
         if not fc.exists(key):
@@ -115,21 +146,6 @@ def volume(env: Dict[str, Any], sr):
             headers=[("Content-Type", "text/plain")],
             body="Value: {}".format(value).encode(),
         )
-
-    if request_type == "PUT":
-        con_len = int(env.get("CONTENT_LENGTH", "0"))
-        if con_len > 0:
-            fc.put(key, env["wsgi.input"])
-            return resp(
-                sr,
-                code="201 Created",
-                headers=[("Content-Type", "text/plain")],
-                body=f"Key {key} has been stored",
-            )
-        else:
-            return resp(
-                sr, code="411 Length Required", headers=[("Content-Type", "text/plain")]
-            )
 
     if request_type == "DELETE":
         fc.delete(key)
