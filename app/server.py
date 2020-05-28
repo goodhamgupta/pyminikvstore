@@ -18,12 +18,25 @@ def resp(start_response, code, headers=[("Content-type", "text/plain")], body=b"
     return [body]
 
 
+class SimpleKV:
+    def __init__(self, fn):
+        import plyvel
+
+        self.db = plyvel.DB("/tmp/cachedb", create_if_missing=True)
+
+    def put(self, k, v):
+        self.db.put(k,v)
+
+    def delete(self, k):
+        self.delete(k)
+
+    def
+
+
 if os.environ["TYPE"] == "master":
     # register volume servers
     volumes = os.environ["VOLUMES"].split(",")
-    import plyvel
-
-    db = plyvel.DB("/tmp/cachedb", create_if_missing=True)
+    db = SimpleKV(os.environ["DB"])
 
 
 def master(env: Dict[str, str], sr):
@@ -123,7 +136,9 @@ def volume(env: Dict[str, Any], sr):
         con_len = int(env.get("CONTENT_LENGTH", "0"))
         if con_len > 0:
             # notify database
-            response = requests.post(f"http://localhost:3000/{key.decode()}", json={"volume": host})
+            response = requests.post(
+                f"http://localhost:3000/{key.decode()}", json={"volume": host}
+            )
             if response.status_code == 200:
                 fc.put(key, env["wsgi.input"])
                 return resp(
@@ -160,6 +175,7 @@ def volume(env: Dict[str, Any], sr):
 
     if request_type == "DELETE":
         import pdb
+
         pdb.set_trace()
         response = requests.post(f"http://localhost:3000/{key.decode()}")
         if response.status_code == 200:

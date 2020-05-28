@@ -1,6 +1,6 @@
 # pyminikvstore
 
-Implementation of a robust and production-level KV store. This is a direct copy of the screencast by George Hotz which can be found [here](https://www.youtube.com/watch?v=cAFjZ1gXBxc).
+Implementation of a robust and production-level KV store. This is a built using the screencast by George Hotz availabe [here](https://www.youtube.com/watch?v=cAFjZ1gXBxc) with a few changes to the design.
 
 This implementation will store KV pairs. It is like nginx has but with filenames as MD5 hash and the real key present in the xattr of the file.
 
